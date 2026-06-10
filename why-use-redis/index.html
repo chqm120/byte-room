@@ -119,6 +119,14 @@
     <div class="layer-noise"></div>
   </div>
 
+  <!-- === AUTHOR BADGE === -->
+  <div id="author" class="clip" data-start="0" data-duration="260" data-track-index="0" style="pointer-events:auto;">
+    <div style="position:absolute;top:60px;right:60px;display:flex;align-items:center;gap:10px;">
+      <div style="width:36px;height:36px;border-radius:50%;background:var(--accent-orange);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;font-family:'Helvetica Neue',sans-serif;">K</div>
+      <div style="font-size:17px;font-weight:600;color:rgba(255,255,255,0.75);font-family:'Helvetica Neue',sans-serif;">Kevin</div>
+    </div>
+  </div>
+
   <!-- ===== S1: 痛点 (0-20s) ===== -->
   <div id="scene1" class="clip" data-start="0" data-duration="20" data-track-index="1">
     <div id="s1-tag" class="tag" style="position:absolute;top:180px;left:0;right:0;margin:0 auto;width:fit-content;color:var(--accent-blue);">HIGH CONCURRENCY</div>
@@ -610,6 +618,9 @@
 <script>
 window.__timelines = window.__timelines || {};
 const tl = gsap.timeline({ paused: true });
+
+// Author badge — fade in at start
+tl.from("#author", { opacity: 0, duration: 0.8 }, 0.5);
 
 // ===== S1: 痛点 (0-20s) =====
 tl.from("#s1-tag", { opacity: 0, y: 20, duration: 0.6, ease: "power3.out" }, 0.2);
