@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>为什么使用 MQ — RocketMQ 深入原理讲解</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep: #06060e;
+  --bg-main: #0c0c1e;
+  --bg-card: rgba(255,255,255,0.035);
+  --bg-card-hover: rgba(255,255,255,0.06);
+  --border-card: rgba(255,255,255,0.07);
+  --border-hover: rgba(255,255,255,0.14);
+  --text-primary: rgba(255,255,255,0.88);
+  --text-secondary: rgba(255,255,255,0.55);
+  --text-dim: rgba(255,255,255,0.28);
+  --accent-blue: #5B9BD5;
+  --accent-orange: #E0794B;
+  --accent-cyan: #4FC3F7;
+  --danger: #D94A4A;
+  --success: #6BAF7B;
+  --warning: #E6A23C;
+  --purple: #B39DDB;
+  --code-bg: #0d1117;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+.bg-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(91,155,213,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(91,155,213,0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.bg-glow {
+  background:
+    radial-gradient(ellipse 800px 600px at 20% 10%, rgba(91,155,213,0.06) 0%, transparent 65%),
+    radial-gradient(ellipse 600px 500px at 80% 50%, rgba(224,121,75,0.04) 0%, transparent 65%),
+    radial-gradient(ellipse 500px 400px at 40% 90%, rgba(179,157,219,0.04) 0%, transparent 65%);
+}
+.container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 32px; }
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(6,6,14,0.85); backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding: 16px 32px;
+}
+nav .inner { max-width: 900px; margin: 0 auto; display: flex; align-items: center; gap: 24px; }
+nav .logo { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px; color: var(--accent-orange); }
+nav .links { display: flex; gap: 14px; flex-wrap: wrap; }
+nav .links a {
+  font-size: 13px; color: var(--text-secondary); text-decoration: none;
+  padding: 4px 10px; border-radius: 6px; transition: all 0.2s;
+}
+nav .links a:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+.hero { padding: 160px 0 80px; text-align: center; }
+.hero .tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; color: var(--accent-blue);
+  letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 24px;
+}
+.hero h1 { font-size: 56px; font-weight: 900; line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 16px; }
+.hero h1 .accent { color: var(--accent-orange); }
+.hero .subtitle { font-size: 20px; color: var(--text-secondary); max-width: 600px; margin: 0 auto 32px; }
+.hero .stats { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }
+.hero .stat { text-align: center; }
+.hero .stat .num { font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 700; }
+.hero .stat .label { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+section { padding: 80px 0; }
+section + section { border-top: 1px solid rgba(255,255,255,0.04); }
+.section-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; letter-spacing: 0.15em; margin-bottom: 12px;
+}
+.section-title { font-size: 36px; font-weight: 800; line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.02em; }
+.section-desc { font-size: 17px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 40px; max-width: 700px; }
+.card {
+  background: var(--bg-card); border: 1px solid var(--border-card);
+  border-radius: 16px; padding: 28px 32px; transition: all 0.3s;
+}
+.card:hover { background: var(--bg-card-hover); border-color: var(--border-hover); }
+.card-grid { display: grid; gap: 20px; }
+.card-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.card-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.card-grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 768px) { .card-grid-2, .card-grid-3, .card-grid-4 { grid-template-columns: 1fr; } }
+.code-block {
+  background: var(--code-bg); border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px; padding: 20px 24px;
+  font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  line-height: 1.8; overflow-x: auto; margin: 16px 0;
+  white-space: pre;
+}
+.code-block .kw { color: #ff7b72; }
+.code-block .type { color: #79c0ff; }
+.code-block .str { color: #a5d6ff; }
+.code-block .method { color: #d2a8ff; }
+.code-block .var { color: #ffa657; }
+.code-block .comment { color: rgba(255,255,255,0.3); }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+.badge-red { background: rgba(217,74,74,0.12); color: var(--danger); border: 1px solid rgba(217,74,74,0.2); }
+.badge-green { background: rgba(107,175,123,0.12); color: var(--success); border: 1px solid rgba(107,175,123,0.2); }
+.badge-blue { background: rgba(91,155,213,0.12); color: var(--accent-blue); border: 1px solid rgba(91,155,213,0.2); }
+.badge-orange { background: rgba(224,121,75,0.12); color: var(--accent-orange); border: 1px solid rgba(224,121,75,0.2); }
+.badge-purple { background: rgba(179,157,219,0.12); color: var(--purple); border: 1px solid rgba(179,157,219,0.2); }
+.badge-cyan { background: rgba(79,195,247,0.12); color: var(--accent-cyan); border: 1px solid rgba(79,195,247,0.2); }
+.highlight {
+  background: rgba(91,155,213,0.06); border-left: 3px solid var(--accent-blue);
+  padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 20px 0;
+  font-size: 15px; color: var(--text-primary); line-height: 1.7;
+}
+.highlight-warn {
+  background: rgba(230,162,60,0.08); border-left: 3px solid var(--warning);
+  padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 20px 0;
+  font-size: 15px; color: var(--text-primary); line-height: 1.7;
+}
+.toc {
+  background: var(--bg-card); border: 1px solid var(--border-card);
+  border-radius: 16px; padding: 28px 32px; margin: 40px 0;
+}
+.toc h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: var(--text-secondary); }
+.toc ol { list-style: none; counter-reset: toc; }
+.toc li { counter-increment: toc; margin-bottom: 8px; }
+.toc li::before {
+  content: counter(toc) "."; font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; color: var(--accent-blue); margin-right: 10px;
+}
+.toc a { color: var(--text-primary); text-decoration: none; font-size: 15px; transition: color 0.2s; }
+.toc a:hover { color: var(--accent-blue); }
+.compare-row { display: flex; align-items: center; gap: 20px; margin: 16px 0; flex-wrap: wrap; }
+.compare-bar { flex: 1; min-width: 200px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.05); overflow: hidden; }
+.compare-fill { height: 100%; border-radius: 4px; }
+.compare-label { font-size: 14px; min-width: 140px; }
+.compare-val { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; min-width: 80px; text-align: right; }
+.arch-diagram {
+  background: rgba(0,0,0,0.3); border-radius: 16px; padding: 40px 32px;
+  text-align: center; margin: 24px 0; border: 1px solid rgba(255,255,255,0.05);
+}
+.arch-node {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 14px 22px; border-radius: 10px; margin: 8px; font-weight: 600; font-size: 14px;
+  min-width: 110px;
+}
+.arch-arrow { font-size: 24px; color: var(--text-dim); margin: 0 6px; display: inline-block; vertical-align: middle; }
+.flow-label { font-size: 12px; color: var(--text-dim); margin-top: 4px; font-weight: normal; }
+.timeline {
+  display: flex; gap: 0; margin: 24px 0; position: relative;
+}
+.timeline-step {
+  flex: 1; text-align: center; position: relative; padding: 20px 12px 12px;
+}
+.timeline-step::before {
+  content: ''; position: absolute; top: 32px; left: 0; right: 0;
+  height: 2px; background: rgba(255,255,255,0.08);
+}
+.timeline-dot {
+  width: 24px; height: 24px; border-radius: 50%; margin: 0 auto 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; position: relative; z-index: 1;
+}
+.timeline-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.timeline-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+footer { padding: 60px 0 40px; text-align: center; border-top: 1px solid rgba(255,255,255,0.04); }
+footer p { font-size: 14px; color: var(--text-dim); }
+@media (max-width: 768px) {
+  .hero h1 { font-size: 36px; }
+  .section-title { font-size: 28px; }
+  .container { padding: 0 20px; }
+  nav .links { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="bg-layer bg-grid"></div>
+<div class="bg-layer bg-glow"></div>
+
+<nav>
+  <div class="inner">
+    <div class="logo">MQ Deep Dive</div>
+    <div class="links">
+      <a href="#pain">痛点</a>
+      <a href="#what">什么是MQ</a>
+      <a href="#async">异步解耦</a>
+      <a href="#peak">流量削峰</a>
+      <a href="#arch">RocketMQ架构</a>
+      <a href="#storage">消息存储</a>
+      <a href="#trans">事务消息</a>
+      <a href="#reliable">可靠传递</a>
+      <a href="#cases">实战场景</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+
+<!-- Hero -->
+<div class="hero">
+  <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:24px;">
+    <div style="width:34px;height:34px;border-radius:50%;background:var(--accent-orange);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff;">K</div>
+    <span style="font-size:16px;font-weight:600;color:var(--text-primary);">Kevin</span>
+    <span style="font-size:13px;color:var(--text-dim);margin-left:8px;">· 技术分享</span>
+  </div>
+  <div class="tag">HIGH CONCURRENCY · ROCKETMQ</div>
+  <h1>为什么使用 <span class="accent">MQ</span></h1>
+  <p class="subtitle">从原理到实战，彻底搞懂 MQ（RocketMQ）在高并发系统中的核心角色</p>
+  <div class="stats">
+    <div class="stat">
+      <div class="num" style="color:var(--accent-orange);">200×</div>
+      <div class="label">性能提升</div>
+    </div>
+    <div class="stat">
+      <div class="num" style="color:var(--accent-cyan);">10w+</div>
+      <div class="label">TPS</div>
+    </div>
+    <div class="stat">
+      <div class="num" style="color:var(--success);">99.99%</div>
+      <div class="label">消息可靠性</div>
+    </div>
+    <div class="stat">
+      <div class="num" style="color:var(--purple);">3</div>
+      <div class="label">核心价值</div>
+    </div>
+  </div>
+</div>
+
+<!-- TOC -->
+<div class="toc">
+  <h3>📖 目录</h3>
+  <ol>
+    <li><a href="#pain">同步耦合的痛点 — 系统之间硬绑在一起</a></li>
+    <li><a href="#what">什么是 MQ — 消息队列的本质</a></li>
+    <li><a href="#async">核心价值一 — 异步解耦</a></li>
+    <li><a href="#peak">核心价值二 — 流量削峰</a></li>
+    <li><a href="#arch">RocketMQ 整体架构</a></li>
+    <li><a href="#storage">消息存储原理 — CommitLog & ConsumeQueue</a></li>
+    <li><a href="#trans">事务消息 — RocketMQ 王牌特性</a></li>
+    <li><a href="#reliable">消息可靠传递 — 三层保障 + 高可用</a></li>
+    <li><a href="#cases">实战场景 — 订单、秒杀、数据同步</a></li>
+  </ol>
+</div>
+<!-- S1: 痛点 -->
+<section id="pain">
+  <div class="section-tag" style="color:var(--danger);">PROBLEM</div>
+  <h2 class="section-title">同步耦合的痛点</h2>
+  <p class="section-desc">
+    一个下单请求，同步调用库存、支付、通知、积分四个服务。每个服务 50ms，总耗时 200ms。任何一个服务慢或挂掉，整个下单请求就失败。这就是典型的同步耦合问题。
+  </p>
+
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:13px;color:var(--danger);font-weight:600;margin-bottom:16px;">❌ 同步调用 — 串行等待</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;">
+      <div class="arch-node" style="background:rgba(224,121,75,0.1);border:1.5px solid rgba(224,121,75,0.4);color:var(--accent-orange);">下单服务<div class="flow-label">发起请求</div></div>
+
+      <span class="arch-arrow">→</span>
+      <div class="arch-node" style="background:rgba(217,74,74,0.08);border:1.5px solid rgba(217,74,74,0.3);color:var(--danger);">库存<div class="flow-label">50ms</div></div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-node" style="background:rgba(217,74,74,0.08);border:1.5px solid rgba(217,74,74,0.3);color:var(--danger);">支付<div class="flow-label">50ms</div></div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-node" style="background:rgba(217,74,74,0.08);border:1.5px solid rgba(217,74,74,0.3);color:var(--danger);">通知<div class="flow-label">50ms</div></div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-node" style="background:rgba(217,74,74,0.08);border:1.5px solid rgba(217,74,74,0.3);color:var(--danger);">积分<div class="flow-label">50ms</div></div>
+    </div>
+    <div style="text-align:center;margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:32px;font-weight:700;color:var(--danger);">总耗时 200ms</div>
+  </div>
+
+  <div class="card-grid card-grid-3">
+    <div class="card" style="text-align:center;">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">服务链过长</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;color:var(--danger);">N×</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">延迟随服务数量线性增长</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">可用性降低</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;color:var(--warning);">N个9</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">任一服务挂掉整链崩溃</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">扩展困难</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;color:var(--danger);">硬编码</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">新增下游必须修改上游代码</div>
+    </div>
+  </div>
+
+  <div class="highlight" style="margin-top:24px;">
+    💡 关键洞察：同步调用链的系统可用性 = 各服务可用性的乘积。只要有一个 99.9% 的服务，整条链就永远达不到 99.9%。
+  </div>
+</section>
+
+<!-- S2: 什么是MQ -->
+<section id="what">
+  <div class="section-tag" style="color:var(--accent-orange);">WHAT IS MQ</div>
+  <h2 class="section-title">Message Queue — 消息队列</h2>
+  <p class="section-desc">
+    MQ 是一个独立部署的中间件，本质上是一个以消息为载体的通信协议。生产者把消息丢进队列，消费者从队列取消息处理。生产者与消费者完全解耦，互不感知。
+  </p>
+
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:14px;color:var(--success);font-weight:600;margin-bottom:16px;">✅ 引入 MQ 后 — 异步解耦</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;">
+      <div class="arch-node" style="background:rgba(224,121,75,0.1);border:1.5px solid rgba(224,121,75,0.4);color:var(--accent-orange);">下单服务<div class="flow-label">发消息</div></div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-node" style="background:rgba(91,155,213,0.1);border:1.5px solid rgba(91,155,213,0.4);color:var(--accent-blue);font-size:16px;font-weight:700;">MQ<div class="flow-label">消息队列</div></div>
+      <span class="arch-arrow">→</span>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <div class="arch-node" style="background:rgba(107,175,123,0.08);border:1.5px solid rgba(107,175,123,0.3);color:var(--success);font-size:12px;padding:8px 14px;">库存服务</div>
+        <div class="arch-node" style="background:rgba(107,175,123,0.08);border:1.5px solid rgba(107,175,123,0.3);color:var(--success);font-size:12px;padding:8px 14px;">支付服务</div>
+        <div class="arch-node" style="background:rgba(107,175,123,0.08);border:1.5px solid rgba(107,175,123,0.3);color:var(--success);font-size:12px;padding:8px 14px;">通知服务</div>
+        <div class="arch-node" style="background:rgba(107,175,123,0.08);border:1.5px solid rgba(107,175,123,0.3);color:var(--success);font-size:12px;padding:8px 14px;">积分服务</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:32px;font-weight:700;color:var(--success);">下单耗时 → 1ms</div>
+  </div>
+
+  <div class="card-grid card-grid-3">
+    <div class="card" style="text-align:center;padding:20px;">
+      <div style="font-size:28px;margin-bottom:8px;">⚡</div>
+      <div style="font-size:16px;font-weight:700;color:var(--accent-orange);margin-bottom:6px;">异步</div>
+      <div style="font-size:13px;color:var(--text-secondary);">非阻塞调用，响应更快</div>
+    </div>
+    <div class="card" style="text-align:center;padding:20px;">
+      <div style="font-size:28px;margin-bottom:8px;">🔗</div>
+      <div style="font-size:16px;font-weight:700;color:var(--accent-blue);margin-bottom:6px;">解耦</div>
+      <div style="font-size:13px;color:var(--text-secondary);">生产消费互不感知</div>
+    </div>
+    <div class="card" style="text-align:center;padding:20px;">
+      <div style="font-size:28px;margin-bottom:8px;">🛡️</div>
+      <div style="font-size:16px;font-weight:700;color:var(--success);margin-bottom:6px;">削峰</div>
+      <div style="font-size:13px;color:var(--text-secondary);">缓冲突发流量</div>
+    </div>
+  </div>
+</section>
+
+<!-- S3: 异步解耦 -->
+<section id="async">
+  <div class="section-tag" style="color:var(--accent-cyan);">CORE VALUE · 1</div>
+  <h2 class="section-title">异步解耦</h2>
+  <p class="section-desc">
+    下单服务只需把消息丢进 MQ，1ms 就返回。库存、支付、通知服务各自订阅消息，独立处理。新增风控服务只需要订阅消息，下单服务代码一行不改。
+  </p>
+
+  <div class="card-grid card-grid-2">
+    <div class="card" style="border-color:rgba(217,74,74,0.2);">
+      <div style="font-size:13px;color:var(--danger);font-weight:600;margin-bottom:12px;">❌ 同步 · 紧耦合</div>
+      <div class="code-block" style="font-size:13px;margin:0;">
+<span class="comment">// 下单服务代码</span>
+<span class="method">createOrder</span>(req) {
+  order = db.<span class="method">save</span>(req);
+  stockSvc.<span class="method">deduct</span>(order);  <span class="comment">// 50ms</span>
+  paySvc.<span class="method">create</span>(order);    <span class="comment">// 50ms</span>
+  notifySvc.<span class="method">send</span>(order);  <span class="comment">// 50ms</span>
+  pointSvc.<span class="method">add</span>(order);    <span class="comment">// 50ms</span>
+  <span class="kw">return</span> order; <span class="comment">// 总共 200ms</span>
+}
+      </div>
+    </div>
+    <div class="card" style="border-color:rgba(107,175,123,0.3);">
+      <div style="font-size:13px;color:var(--success);font-weight:600;margin-bottom:12px;">✅ 异步 · 松耦合</div>
+      <div class="code-block" style="font-size:13px;margin:0;">
+<span class="comment">// 下单服务代码</span>
+<span class="method">createOrder</span>(req) {
+  order = db.<span class="method">save</span>(req);
+  mq.<span class="method">send</span>(<span class="str">"ORDER_CREATED"</span>, order);
+  <span class="comment">// 1ms 返回！</span>
+  <span class="kw">return</span> order;
+}
+<span class="comment">// 库存服务（独立订阅）</span>
+<span class="method">@Subscribe</span>(<span class="str">"ORDER_CREATED"</span>)
+<span class="method">onOrder</span>(event) { <span class="method">deduct</span>(event); }
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight" style="margin-top:24px;">
+    💡 <strong>松耦合的威力：</strong>下单服务不知道有哪些消费者，将来新增任何下游服务，都不需要修改下单服务的代码。这就是开闭原则 — 对扩展开放，对修改关闭。
+  </div>
+
+  <div style="text-align:center;margin:32px 0;">
+    <span style="font-size:16px;color:var(--text-secondary);">响应时间对比</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:48px;font-weight:900;color:var(--accent-orange);margin-left:16px;">200ms → 1ms</span>
+  </div>
+
+  <div class="compare-row">
+    <div class="compare-label">同步 · 串行调用</div>
+    <div class="compare-bar"><div class="compare-fill" style="width:100%;background:var(--danger);"></div></div>
+    <div class="compare-val" style="color:var(--danger);">200ms</div>
+  </div>
+  <div class="compare-row">
+    <div class="compare-label">异步 · MQ 解耦</div>
+    <div class="compare-bar"><div class="compare-fill" style="width:2%;background:var(--success);min-width:6px;"></div></div>
+    <div class="compare-val" style="color:var(--success);">~1ms</div>
+  </div>
+</section>
+
+<!-- S4: 流量削峰 -->
+<section id="peak">
+  <div class="section-tag" style="color:var(--warning);">CORE VALUE · 2</div>
+  <h2 class="section-title">流量削峰</h2>
+  <p class="section-desc">
+    秒杀场景：十万请求在同一秒涌入。没有 MQ，数据库直接崩溃。有了 MQ，消费者按自己的能力匀速消费，系统稳如泰山。
+  </p>
+
+  <div class="card" style="margin-bottom:24px;">
+    <div style="font-size:14px;font-weight:600;margin-bottom:20px;">🔴 无 MQ · 流量直打数据库</div>
+    <div style="position:relative;height:180px;display:flex;align-items:flex-end;gap:2px;padding:0 20px;">
+      <div style="position:absolute;left:20px;top:20px;font-size:12px;color:var(--text-dim);">请求量</div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div style="width:100%;height:160px;background:linear-gradient(to top,var(--danger),rgba(217,74,74,0.3));border-radius:4px 4px 0 0;"></div>
+        <div style="font-size:11px;color:var(--text-dim);">0s</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div style="width:100%;height:40px;background:rgba(217,74,74,0.15);border-radius:4px 4px 0 0;border:1px dashed var(--danger);"></div>
+        <div style="font-size:11px;color:var(--danger);font-weight:600;">💀 DB 崩溃</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div style="width:100%;height:5px;background:rgba(255,255,255,0.05);border-radius:4px 4px 0 0;"></div>
+        <div style="font-size:11px;color:var(--text-dim);">宕机</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:14px;font-weight:600;margin-bottom:20px;">🟢 有 MQ · 流量被削平</div>
+    <div style="position:relative;height:180px;display:flex;align-items:flex-end;gap:2px;padding:0 20px;">
+      <div style="position:absolute;left:20px;top:20px;font-size:12px;color:var(--text-dim);">请求量</div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div style="width:100%;height:160px;background:linear-gradient(to top,var(--accent-blue),rgba(91,155,213,0.3));border-radius:4px 4px 0 0;"></div>
+        <div style="font-size:11px;color:var(--text-dim);">涌入 10w</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div style="width:100%;height:130px;background:linear-gradient(to top,var(--accent-blue),rgba(91,155,213,0.2));border-radius:4px 4px 0 0;"></div>
+        <div style="font-size:11px;color:var(--accent-blue);">队列缓冲</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div style="width:100%;height:24px;background:linear-gradient(to top,var(--success),rgba(107,175,123,0.2));border-radius:4px 4px 0 0;"></div>
+        <div style="font-size:11px;color:var(--success);font-weight:600;">匀速 1000/s</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <div style="width:100%;height:24px;background:linear-gradient(to top,var(--success),rgba(107,175,123,0.2));border-radius:4px 4px 0 0;"></div>
+        <div style="font-size:11px;color:var(--success);">稳定消费</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight-warn" style="margin-top:24px;">
+    ⚡ <strong>削峰本质：</strong>把尖锐的流量脉冲变成匀速的细水长流。队列容量就是缓冲池，消费者的处理能力就是阀门。只要峰值总量不超过队列容量，系统就不会崩。
+  </div>
+</section>
+
+<!-- S5: RocketMQ 架构 -->
+<section id="arch">
+  <div class="section-tag" style="color:var(--accent-blue);">ARCHITECTURE</div>
+  <h2 class="section-title">RocketMQ 整体架构</h2>
+  <p class="section-desc">
+    RocketMQ 由四个核心角色组成：NameServer（注册中心）、Broker（消息服务器）、Producer（生产者）、Consumer（消费者）。
+  </p>
+
+  <div class="arch-diagram">
+    <div style="margin-bottom:24px;">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;letter-spacing:0.1em;">CLIENT LAYER</div>
+      <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;">
+        <div class="arch-node" style="background:rgba(224,121,75,0.12);border:2px solid rgba(224,121,75,0.4);color:var(--accent-orange);min-width:140px;">
+          Producer<div class="flow-label">消息生产者</div>
+        </div>
+        <div class="arch-node" style="background:rgba(107,175,123,0.12);border:2px solid rgba(107,175,123,0.4);color:var(--success);min-width:140px;">
+          Consumer<div class="flow-label">消息消费者</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:center;gap:8px;align-items:center;margin-bottom:24px;">
+      <span style="font-size:12px;color:var(--text-dim);">↓ 路由查询</span>
+      <span style="font-size:12px;color:var(--text-dim);margin-left:80px;">↑ 发送/拉取消息 ↓</span>
+    </div>
+
+    <div style="display:flex;justify-content:center;gap:40px;flex-wrap:wrap;">
+      <div>
+        <div class="arch-node" style="background:rgba(179,157,219,0.12);border:2px solid rgba(179,157,219,0.4);color:var(--purple);min-width:180px;">
+          NameServer 集群<div class="flow-label">无状态 · 节点独立</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);text-align:center;margin-top:6px;">注册 Broker 路由信息</div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;letter-spacing:0.1em;">BROKER LAYER</div>
+      <div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;">
+        <div class="arch-node" style="background:rgba(91,155,213,0.12);border:2px solid rgba(91,155,213,0.4);color:var(--accent-blue);min-width:130px;">
+          Broker-A<div class="flow-label">Master</div>
+        </div>
+        <div class="arch-node" style="background:rgba(91,155,213,0.08);border:2px solid rgba(91,155,213,0.25);color:var(--accent-blue);opacity:0.7;min-width:130px;">
+          Broker-A<div class="flow-label">Slave</div>
+        </div>
+        <div class="arch-node" style="background:rgba(79,195,247,0.12);border:2px solid rgba(79,195,247,0.4);color:var(--accent-cyan);min-width:130px;">
+          Broker-B<div class="flow-label">Master</div>
+        </div>
+        <div class="arch-node" style="background:rgba(79,195,247,0.08);border:2px solid rgba(79,195,247,0.25);color:var(--accent-cyan);opacity:0.7;min-width:130px;">
+          Broker-B<div class="flow-label">Slave</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-grid card-grid-4">
+    <div class="card" style="padding:20px;text-align:center;">
+      <div style="font-size:12px;color:var(--purple);font-weight:600;margin-bottom:8px;">NAMESERVER</div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">注册中心，保存 Broker 路由信息，节点间不通信</div>
+    </div>
+    <div class="card" style="padding:20px;text-align:center;">
+      <div style="font-size:12px;color:var(--accent-blue);font-weight:600;margin-bottom:8px;">BROKER</div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">消息存储和转发，支持主从复制</div>
+    </div>
+    <div class="card" style="padding:20px;text-align:center;">
+      <div style="font-size:12px;color:var(--accent-orange);font-weight:600;margin-bottom:8px;">PRODUCER</div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">发送消息，支持同步/异步/单向</div>
+    </div>
+    <div class="card" style="padding:20px;text-align:center;">
+      <div style="font-size:12px;color:var(--success);font-weight:600;margin-bottom:8px;">CONSUMER</div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">拉取消费，支持集群/广播模式</div>
+    </div>
+  </div>
+
+  <div class="highlight" style="margin-top:24px;">
+    💡 <strong>NameServer 极简设计：</strong>每个节点独立，节点之间不通信。Producer 定期从所有 NameServer 节点拉取路由信息，任一节点存活就能获取完整路由表。简单即高可用。
+  </div>
+</section>
+
+<!-- S6: 消息存储 -->
+<section id="storage">
+  <div class="section-tag" style="color:var(--accent-orange);">STORAGE</div>
+  <h2 class="section-title">消息存储原理</h2>
+  <p class="section-desc">
+    RocketMQ 高性能的秘密：所有 Topic 的消息共享一个 CommitLog 顺序写文件，配合 ConsumeQueue 索引实现极速读取。
+  </p>
+
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:14px;font-weight:600;margin-bottom:16px;">📝 写入流程 — 顺序写 CommitLog</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;">
+      <div class="arch-node" style="background:rgba(224,121,75,0.1);border:1.5px solid rgba(224,121,75,0.4);color:var(--accent-orange);">
+        Producer
+        <div class="flow-label">发送消息</div>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-node" style="background:rgba(91,155,213,0.1);border:1.5px solid rgba(91,155,213,0.4);color:var(--accent-blue);">
+        Broker
+        <div class="flow-label">接收</div>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-node" style="background:rgba(230,162,60,0.1);border:1.5px solid rgba(230,162,60,0.4);color:var(--warning);">
+        PageCache
+        <div class="flow-label">内存缓冲区</div>
+      </div>
+      <span class="arch-arrow">→</span>
+      <div class="arch-node" style="background:rgba(107,175,123,0.1);border:1.5px solid rgba(107,175,123,0.4);color:var(--success);">
+        CommitLog
+        <div class="flow-label">顺序写磁盘</div>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding:16px;background:rgba(0,0,0,0.2);border-radius:10px;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-dim);margin-bottom:8px;">CommitLog（所有 Topic 共享）</div>
+      <div style="display:flex;gap:2px;flex-wrap:wrap;">
+        <div style="background:rgba(224,121,75,0.3);border:1px solid var(--accent-orange);border-radius:4px;padding:6px 10px;font-size:11px;color:var(--accent-orange);">Topic-A msg1</div>
+        <div style="background:rgba(91,155,213,0.3);border:1px solid var(--accent-blue);border-radius:4px;padding:6px 10px;font-size:11px;color:var(--accent-blue);">Topic-B msg1</div>
+        <div style="background:rgba(224,121,75,0.3);border:1px solid var(--accent-orange);border-radius:4px;padding:6px 10px;font-size:11px;color:var(--accent-orange);">Topic-A msg2</div>
+        <div style="background:rgba(107,175,123,0.3);border:1px solid var(--success);border-radius:4px;padding:6px 10px;font-size:11px;color:var(--success);">Topic-C msg1</div>
+        <div style="background:rgba(91,155,213,0.3);border:1px solid var(--accent-blue);border-radius:4px;padding:6px 10px;font-size:11px;color:var(--accent-blue);">Topic-B msg2</div>
+        <div style="background:rgba(224,121,75,0.3);border:1px solid var(--accent-orange);border-radius:4px;padding:6px 10px;font-size:11px;color:var(--accent-orange);">Topic-A msg3</div>
+      </div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:8px;text-align:center;">← 顺序追加写入，共享一次磁盘 IO →</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:14px;font-weight:600;margin-bottom:16px;">📖 读取流程 — ConsumeQueue 索引</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:240px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);margin-bottom:10px;">ConsumeQueue (Topic-A 的索引)</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="background:rgba(79,195,247,0.15);border:1px solid rgba(79,195,247,0.3);border-radius:6px;padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);">
+            offset: 0x0000 → CommitLog 位置
+          </div>
+          <div style="background:rgba(79,195,247,0.15);border:1px solid rgba(79,195,247,0.3);border-radius:6px;padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);">
+            offset: 0x0200 → CommitLog 位置
+          </div>
+          <div style="background:rgba(79,195,247,0.15);border:1px solid rgba(79,195,247,0.3);border-radius:6px;padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);">
+            offset: 0x0600 → CommitLog 位置
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;min-width:240px;">
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.8;">
+          <div style="margin-bottom:10px;">Consumer 读取分两步：</div>
+          <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;">
+            <div style="background:var(--accent-orange);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">1</div>
+            <div>先查 <strong style="color:var(--accent-cyan);">ConsumeQueue</strong> 拿到偏移量</div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start;">
+            <div style="background:var(--accent-orange);color:#fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">2</div>
+            <div>再用偏移量去 <strong style="color:var(--success);">CommitLog</strong> 读消息</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-grid card-grid-2">
+    <div class="card" style="text-align:center;">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">顺序写磁盘速度</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:40px;font-weight:700;color:var(--success);">~600MB/s</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">接近内存写入速度</div>
+    </div>
+    <div class="card" style="text-align:center;">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">随机写磁盘速度</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:40px;font-weight:700;color:var(--danger);">~0.1MB/s</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;">相差 6000 倍</div>
+    </div>
+  </div>
+
+  <div class="highlight" style="margin-top:24px;">
+    💡 <strong>核心设计：</strong>写时追加（顺序写），读时索引（ConsumeQueue）。用一次顺序写 IO 承载所有 Topic 的消息，这就是 RocketMQ 十万级 TPS 的底层秘密。
+  </div>
+</section>
+
+<!-- S7: 事务消息 -->
+<section id="trans">
+  <div class="section-tag" style="color:var(--accent-orange);">KILLER FEATURE</div>
+  <h2 class="section-title">事务消息</h2>
+  <p class="section-desc">
+    RocketMQ 的王牌特性。解决分布式事务难题：本地数据库操作和发送消息，要么都成功，要么都失败。
+  </p>
+
+  <div class="card" style="margin-bottom:20px;">
+    <div style="font-size:14px;font-weight:600;margin-bottom:20px;text-align:center;">事务消息执行流程</div>
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="background:var(--accent-orange);color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;">1</div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;color:var(--accent-orange);">发送 Half 消息</div>
+          <div style="font-size:13px;color:var(--text-secondary);">Producer 发送一条对 Consumer 不可见的半消息到 Broker</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="background:var(--accent-blue);color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;">2</div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;color:var(--accent-blue);">执行本地事务</div>
+          <div style="font-size:13px;color:var(--text-secondary);">Broker 返回 Half 消息成功后，Producer 执行本地数据库事务</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="background:var(--success);color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;">3</div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;color:var(--success);">Commit 或 Rollback</div>
+          <div style="font-size:13px;color:var(--text-secondary);">本地事务成功 → Commit（消息对 Consumer 可见）<br>本地事务失败 → Rollback（消息丢弃）</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="background:var(--purple);color:#fff;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;">4</div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;color:var(--purple);">事务回查（兜底）</div>
+          <div style="font-size:13px;color:var(--text-secondary);">如果 Broker 长时间没收到 Commit/Rollback，主动回查 Producer 的本地事务状态</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="code-block">
+<span class="comment">// RocketMQ 事务消息代码示例</span>
+<span class="type">TransactionListener</span> listener = <span class="kw">new</span> <span class="type">TransactionListener</span>() {
+
+  <span class="comment">// 执行本地事务</span>
+  <span class="kw">public</span> <span class="type">LocalTransactionState</span> <span class="method">executeLocalTransaction</span>(<span class="type">Message</span> msg, <span class="type">Object</span> arg) {
+    <span class="kw">try</span> {
+      orderService.<span class="method">createOrder</span>(arg);  <span class="comment">// 本地数据库操作</span>
+      <span class="kw">return</span> <span class="type">LocalTransactionState</span>.<span class="var">COMMIT_MESSAGE</span>;
+    } <span class="kw">catch</span> (<span class="type">Exception</span> e) {
+      <span class="kw">return</span> <span class="type">LocalTransactionState</span>.<span class="var">ROLLBACK_MESSAGE</span>;
+    }
+  }
+
+  <span class="comment">// 事务回查</span>
+  <span class="kw">public</span> <span class="type">LocalTransactionState</span> <span class="method">checkLocalTransaction</span>(<span class="type">MessageExt</span> msg) {
+    <span class="kw">return</span> orderService.<span class="method">isOrderCreated</span>(msg)
+      ? <span class="type">LocalTransactionState</span>.<span class="var">COMMIT_MESSAGE</span>
+      : <span class="type">LocalTransactionState</span>.<span class="var">ROLLBACK_MESSAGE</span>;
+  }
+};
+  </div>
+
+  <div class="highlight">
+    💡 <strong>两阶段提交的 MQ 实现：</strong>Half 消息就是 prepare 阶段，Commit/Rollback 就是 commit/rollback 阶段，事务回查就是超时补偿。和数据库 XA 事务原理一样，但性能高出几个数量级。
+  </div>
+</section>
+
+<!-- S8: 消息可靠性 -->
+<section id="reliable">
+  <div class="section-tag" style="color:var(--success);">CORE VALUE · 3</div>
+  <h2 class="section-title">消息可靠传递</h2>
+  <p class="section-desc">
+    在分布式系统中，网络不可靠，服务会宕机。MQ 通过持久化、确认机制、重试策略，确保消息从生产到消费不丢失。
+  </p>
+
+  <div class="timeline">
+    <div class="timeline-step">
+      <div class="timeline-dot" style="background:rgba(224,121,75,0.2);border:2px solid var(--accent-orange);color:var(--accent-orange);">1</div>
+      <div class="timeline-title" style="color:var(--accent-orange);">Producer</div>
+      <div class="timeline-desc">发送消息<br>等待 ACK 确认<br>失败自动重试</div>
+    </div>
+    <div class="timeline-step">
+      <div class="timeline-dot" style="background:rgba(91,155,213,0.2);border:2px solid var(--accent-blue);color:var(--accent-blue);">2</div>
+      <div class="timeline-title" style="color:var(--accent-blue);">Broker</div>
+      <div class="timeline-desc">写入 CommitLog<br>同步刷盘落磁盘<br>主从复制到 Slave</div>
+    </div>
+    <div class="timeline-step">
+      <div class="timeline-dot" style="background:rgba(107,175,123,0.2);border:2px solid var(--success);color:var(--success);">3</div>
+      <div class="timeline-title" style="color:var(--success);">Consumer</div>
+      <div class="timeline-desc">拉取消息处理<br>成功后发 ACK<br>失败则重新投递</div>
+    </div>
+  </div>
+
+  <div class="card-grid card-grid-3" style="margin-top:24px;">
+    <div class="card" style="border-color:rgba(224,121,75,0.3);">
+      <div style="font-size:20px;margin-bottom:10px;">📤</div>
+      <div style="font-size:16px;font-weight:700;color:var(--accent-orange);margin-bottom:10px;">生产端保障</div>
+      <ul style="font-size:13px;color:var(--text-secondary);line-height:2;padding-left:18px;">
+        <li>同步发送 + 重试</li>
+        <li>发送失败入死信队列</li>
+        <li>事务消息保障</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(91,155,213,0.3);">
+      <div style="font-size:20px;margin-bottom:10px;">💾</div>
+      <div style="font-size:16px;font-weight:700;color:var(--accent-blue);margin-bottom:10px;">Broker 保障</div>
+      <ul style="font-size:13px;color:var(--text-secondary);line-height:2;padding-left:18px;">
+        <li>同步刷盘（SYNC_FLUSH）</li>
+        <li>主从复制（SYNC_MASTER）</li>
+        <li>多副本 Dledger 模式</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(107,175,123,0.3);">
+      <div style="font-size:20px;margin-bottom:10px;">📥</div>
+      <div style="font-size:16px;font-weight:700;color:var(--success);margin-bottom:10px;">消费端保障</div>
+      <ul style="font-size:13px;color:var(--text-secondary);line-height:2;padding-left:18px;">
+        <li>处理成功后才 ACK</li>
+        <li>消费失败自动重试</li>
+        <li>幂等性消费防重复</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="highlight" style="margin-top:24px;">
+    💡 对于支付、交易等核心业务，必须开启<strong style="color:var(--accent-orange);">同步刷盘 + 同步复制</strong>。牺牲一点性能，换来消息绝不丢失。
+  </div>
+
+  <div style="height:1px;background:rgba(255,255,255,0.06);margin:32px 0;"></div>
+  <div style="font-size:15px;font-weight:700;color:var(--purple);margin-bottom:16px;">🔄 高可用机制：主从复制与 Dledger</div>
+  <div class="card-grid card-grid-2" style="margin-bottom:16px;">
+    <div class="card" style="border-color:rgba(91,155,213,0.3);">
+      <div style="font-size:14px;font-weight:700;color:var(--accent-blue);margin-bottom:10px;">传统主从模式</div>
+      <ul style="font-size:13px;color:var(--text-secondary);line-height:2;padding-left:18px;">
+        <li>Master 负责读写</li>
+        <li>Slave 只读，异步/同步复制</li>
+        <li>Master 挂了需人工切换</li>
+      </ul>
+    </div>
+    <div class="card" style="border-color:rgba(179,157,219,0.3);">
+      <div style="font-size:14px;font-weight:700;color:var(--purple);margin-bottom:10px;">Dledger 模式（推荐）</div>
+      <ul style="font-size:13px;color:var(--text-secondary);line-height:2;padding-left:18px;">
+        <li>基于 <strong style="color:var(--purple);">Raft</strong> 协议</li>
+        <li>Leader 挂了自动选主，秒级切换</li>
+        <li>数据强一致，生产推荐方案</li>
+      </ul>
+    </div>
+  </div>
+
+</section>
+
+<!-- S9: 实战场景 -->
+<section id="cases">
+  <div class="section-tag" style="color:var(--success);">PRACTICE</div>
+  <h2 class="section-title">实战场景</h2>
+  <p class="section-desc">
+    MQ 在互联网系统中的应用无处不在。以下是最经典的三个实战场景。
+  </p>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div style="background:var(--accent-orange);color:#fff;padding:4px 12px;border-radius:6px;font-size:13px;font-weight:700;">场景一</div>
+      <div style="font-size:20px;font-weight:700;">订单系统</div>
+    </div>
+    <p style="font-size:14px;color:var(--text-secondary);line-height:1.7;margin-bottom:16px;">
+      用户下单后，订单服务发送「订单创建」消息。库存、支付、物流、通知服务各自订阅处理，互不干扰。
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+      <span class="badge badge-orange">下单服务 → MQ</span>
+      <span class="badge badge-green">库存服务 ← MQ</span>
+      <span class="badge badge-green">支付服务 ← MQ</span>
+      <span class="badge badge-green">物流服务 ← MQ</span>
+      <span class="badge badge-green">通知服务 ← MQ</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div style="background:var(--danger);color:#fff;padding:4px 12px;border-radius:6px;font-size:13px;font-weight:700;">场景二</div>
+      <div style="font-size:20px;font-weight:700;">秒杀系统</div>
+    </div>
+    <p style="font-size:14px;color:var(--text-secondary);line-height:1.7;margin-bottom:16px;">
+      海量请求涌入时，先写入 MQ 缓冲，后端按最大能力匀速消费。超库存请求直接拒绝，用户看到「排队中」。
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+      <span class="badge badge-red">10w 请求涌入</span>
+      <span class="badge badge-blue">MQ 缓冲队列</span>
+      <span class="badge badge-green">匀速 1000/s 消费</span>
+      <span class="badge badge-purple">数据库稳如泰山</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div style="background:var(--accent-blue);color:#fff;padding:4px 12px;border-radius:6px;font-size:13px;font-weight:700;">场景三</div>
+      <div style="font-size:20px;font-weight:700;">数据同步</div>
+    </div>
+    <p style="font-size:14px;color:var(--text-secondary);line-height:1.7;margin-bottom:16px;">
+      通过监听 MySQL Binlog 把数据变更发到 MQ，下游 Elasticsearch、Redis、数据仓库各自订阅，完成数据同步。
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+      <span class="badge badge-orange">MySQL Binlog</span>
+      <span class="badge badge-blue">Canal → MQ</span>
+      <span class="badge badge-green">ES 索引更新</span>
+      <span class="badge badge-green">Redis 缓存更新</span>
+      <span class="badge badge-green">数据仓库同步</span>
+    </div>
+  </div>
+
+  <div class="highlight">
+    💡 <strong>共性模式：</strong>所有场景的本质都是同一个模式 — 上游产生事件，MQ 传递事件，下游处理事件。系统之间通过消息实现最终一致性，而不是强一致性。
+  </div>
+</section>
+
+<!-- Summary -->
+<section style="text-align:center;padding:100px 0;">
+  <div class="section-tag" style="color:var(--accent-orange);">SUMMARY</div>
+  <h2 class="section-title" style="font-size:40px;">核心总结</h2>
+  <p class="section-desc" style="margin:0 auto 40px;text-align:center;">
+    MQ 的核心价值是三个词：<strong style="color:var(--accent-orange);">异步</strong>、<strong style="color:var(--accent-blue);">解耦</strong>、<strong style="color:var(--success);">削峰</strong>
+  </p>
+
+  <div class="card-grid card-grid-3">
+    <div class="card" style="text-align:center;border-color:rgba(224,121,75,0.3);">
+      <div style="font-size:40px;margin-bottom:12px;">⚡</div>
+      <div style="font-size:22px;font-weight:700;color:var(--accent-orange);margin-bottom:8px;">异步</div>
+      <div style="font-size:14px;color:var(--text-secondary);line-height:1.6;">系统响应更快<br>调用链路更短</div>
+    </div>
+    <div class="card" style="text-align:center;border-color:rgba(91,155,213,0.3);">
+      <div style="font-size:40px;margin-bottom:12px;">🔗</div>
+      <div style="font-size:22px;font-weight:700;color:var(--accent-blue);margin-bottom:8px;">解耦</div>
+      <div style="font-size:14px;color:var(--text-secondary);line-height:1.6;">系统更容易扩展<br>独立部署维护</div>
+    </div>
+    <div class="card" style="text-align:center;border-color:rgba(107,175,123,0.3);">
+      <div style="font-size:40px;margin-bottom:12px;">🛡️</div>
+      <div style="font-size:22px;font-weight:700;color:var(--success);margin-bottom:8px;">削峰</div>
+      <div style="font-size:14px;color:var(--text-secondary);line-height:1.6;">流量洪峰下稳定<br>保护下游系统</div>
+    </div>
+  </div>
+
+  <div style="margin-top:48px;padding:32px;background:rgba(224,121,75,0.05);border:1px solid rgba(224,121,75,0.2);border-radius:16px;max-width:600px;margin-left:auto;margin-right:auto;">
+    <div style="font-size:16px;color:var(--text-secondary);line-height:1.8;">
+      掌握 MQ 的设计原理和使用方法，<br>是你从业务开发者进阶为<strong style="color:var(--accent-orange);">架构师</strong>的关键一步。
+    </div>
+  </div>
+</section>
+
+</div>
+
+<footer>
+  <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:12px;">
+    <div style="width:36px;height:36px;border-radius:50%;background:var(--accent-orange);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;">K</div>
+    <span style="font-size:18px;font-weight:700;color:var(--text-primary);">Kevin</span>
+  </div>
+  <p>觉得有用？点赞收藏，我们下期见 👋</p>
+  <p style="margin-top:8px;">MQ Deep Dive · 2026</p>
+</footer>
+
+</body>
+</html>
