@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>为什么要使用 DDD — 领域驱动设计深入讲解</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep: #06060e;
+  --bg-main: #0c0c1e;
+  --bg-card: rgba(255,255,255,0.035);
+  --bg-card-hover: rgba(255,255,255,0.06);
+  --border-card: rgba(255,255,255,0.07);
+  --border-hover: rgba(255,255,255,0.14);
+  --text-primary: rgba(255,255,255,0.88);
+  --text-secondary: rgba(255,255,255,0.55);
+  --text-dim: rgba(255,255,255,0.28);
+  --accent-blue: #5B9BD5;
+  --accent-orange: #E0794B;
+  --accent-cyan: #4FC3F7;
+  --danger: #D94A4A;
+  --success: #6BAF7B;
+  --warning: #E6A23C;
+  --purple: #B39DDB;
+  --code-bg: #0d1117;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--bg-deep); color: var(--text-primary); font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif; line-height: 1.7; overflow-x: hidden; }
+.bg-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+.bg-grid { background-image: linear-gradient(rgba(91,155,213,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(91,155,213,0.02) 1px, transparent 1px); background-size: 60px 60px; }
+.bg-glow { background: radial-gradient(ellipse 800px 600px at 20% 10%, rgba(91,155,213,0.06) 0%, transparent 65%), radial-gradient(ellipse 600px 500px at 80% 50%, rgba(224,121,75,0.04) 0%, transparent 65%), radial-gradient(ellipse 500px 400px at 40% 90%, rgba(179,157,219,0.04) 0%, transparent 65%); }
+.container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 0 32px; }
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(6,6,14,0.85); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 16px 32px; }
+nav .inner { max-width: 900px; margin: 0 auto; display: flex; align-items: center; gap: 24px; }
+nav .logo { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 16px; color: var(--accent-orange); }
+nav .links { display: flex; gap: 10px; flex-wrap: wrap; }
+nav .links a { font-size: 13px; color: var(--text-secondary); text-decoration: none; padding: 4px 10px; border-radius: 6px; transition: all 0.2s; }
+nav .links a:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+.hero { padding: 160px 0 80px; text-align: center; }
+.hero .tag { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--accent-blue); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 24px; }
+.hero h1 { font-size: 52px; font-weight: 900; line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 16px; }
+.hero h1 .accent { color: var(--accent-orange); }
+.hero .subtitle { font-size: 20px; color: var(--text-secondary); max-width: 600px; margin: 0 auto 32px; }
+.hero .stats { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }
+.hero .stat { text-align: center; }
+.hero .stat .num { font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 700; }
+.hero .stat .label { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+section { padding: 80px 0; }
+section + section { border-top: 1px solid rgba(255,255,255,0.04); }
+.section-tag { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.15em; margin-bottom: 12px; }
+.section-title { font-size: 36px; font-weight: 800; line-height: 1.2; margin-bottom: 16px; letter-spacing: -0.02em; }
+.section-desc { font-size: 17px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 40px; max-width: 700px; }
+.card { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 16px; padding: 28px 32px; transition: all 0.3s; }
+.card:hover { background: var(--bg-card-hover); border-color: var(--border-hover); }
+.card-grid { display: grid; gap: 20px; }
+.card-grid-2 { grid-template-columns: repeat(2, 1fr); }
+.card-grid-3 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 768px) { .card-grid-2, .card-grid-3 { grid-template-columns: 1fr; } }
+.code-block { background: var(--code-bg); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 20px 24px; font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 1.8; overflow-x: auto; margin: 16px 0; white-space: pre; }
+.code-block .kw { color: #ff7b72; } .code-block .type { color: #79c0ff; } .code-block .str { color: #a5d6ff; } .code-block .method { color: #d2a8ff; } .code-block .var { color: #ffa657; } .code-block .comment { color: rgba(255,255,255,0.3); }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; }
+.badge-red { background: rgba(217,74,74,0.12); color: var(--danger); border: 1px solid rgba(217,74,74,0.2); }
+.badge-green { background: rgba(107,175,123,0.12); color: var(--success); border: 1px solid rgba(107,175,123,0.2); }
+.badge-blue { background: rgba(91,155,213,0.12); color: var(--accent-blue); border: 1px solid rgba(91,155,213,0.2); }
+.badge-orange { background: rgba(224,121,75,0.12); color: var(--accent-orange); border: 1px solid rgba(224,121,75,0.2); }
+.badge-purple { background: rgba(179,157,219,0.12); color: var(--purple); border: 1px solid rgba(179,157,219,0.2); }
+.badge-cyan { background: rgba(79,195,247,0.12); color: var(--accent-cyan); border: 1px solid rgba(79,195,247,0.2); }
+.highlight { background: rgba(91,155,213,0.06); border-left: 3px solid var(--accent-blue); padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 20px 0; font-size: 15px; color: var(--text-primary); line-height: 1.7; }
+.highlight-warn { background: rgba(230,162,60,0.08); border-left: 3px solid var(--warning); padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 20px 0; font-size: 15px; color: var(--text-primary); line-height: 1.7; }
+.toc { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 16px; padding: 28px 32px; margin: 40px 0; }
+.toc h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: var(--text-secondary); }
+.toc ol { list-style: none; counter-reset: toc; }
+.toc li { counter-increment: toc; margin-bottom: 8px; }
+.toc li::before { content: counter(toc) "."; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--accent-blue); margin-right: 10px; }
+.toc a { color: var(--text-primary); text-decoration: none; font-size: 15px; transition: color 0.2s; }
+.toc a:hover { color: var(--accent-blue); }
+h3 { font-size: 22px; font-weight: 700; margin: 32px 0 16px; color: var(--text-primary); }
+p { margin-bottom: 16px; font-size: 16px; color: var(--text-secondary); line-height: 1.8; }
+ul, ol { margin: 12px 0 20px 24px; }
+li { margin-bottom: 8px; font-size: 15px; color: var(--text-secondary); line-height: 1.7; }
+strong { color: var(--text-primary); }
+.step-grid { display: flex; gap: 0; margin: 24px 0; position: relative; }
+.step { flex: 1; text-align: center; padding: 20px 12px; position: relative; }
+.step .num { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: #fff; }
+.step .title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.step .desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.arch-diagram { background: rgba(0,0,0,0.3); border-radius: 16px; padding: 40px 32px; text-align: center; margin: 24px 0; border: 1px solid rgba(255,255,255,0.05); }
+.arch-node { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; padding: 14px 22px; border-radius: 10px; margin: 8px; font-weight: 600; font-size: 14px; min-width: 110px; }
+.arch-arrow { font-size: 24px; color: var(--text-dim); margin: 0 6px; display: inline-block; vertical-align: middle; }
+.hex-container { display: flex; gap: 0; margin: 32px 0; align-items: stretch; }
+.hex-side { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.hex-adapter { background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px; padding: 14px 16px; text-align: center; transition: all 0.3s; }
+.hex-adapter:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+.hex-adapter .adapter-icon { font-size: 22px; margin-bottom: 6px; }
+.hex-adapter .adapter-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.hex-adapter .adapter-detail { font-size: 12px; color: var(--text-secondary); }
+.hex-center { flex: 1.4; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; padding: 0 20px; }
+.hex-core { background: rgba(224,121,75,0.06); border: 2px solid var(--accent-orange); border-radius: 20px; padding: 28px 24px; width: 100%; text-align: center; position: relative; }
+.hex-core::before, .hex-core::after { content: ''; position: absolute; top: 50%; width: 30px; height: 2px; }
+.hex-core::before { left: -32px; background: linear-gradient(90deg, var(--text-dim), var(--accent-orange)); }
+.hex-core::after { right: -32px; background: linear-gradient(90deg, var(--accent-orange), var(--text-dim)); }
+.hex-port { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-family: 'JetBrains Mono', monospace; font-weight: 600; letter-spacing: 0.05em; margin: 3px; }
+.hex-port-in { background: rgba(91,155,213,0.12); color: var(--accent-blue); border: 1px solid rgba(91,155,213,0.25); }
+.hex-port-out { background: rgba(179,157,219,0.12); color: var(--purple); border: 1px solid rgba(179,157,219,0.25); }
+.hex-label-side { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; text-align: center; margin-bottom: 12px; padding: 6px 0; border-radius: 8px; }
+.layer-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; }
+.layer-table th { text-align: left; padding: 10px 16px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid rgba(255,255,255,0.06); }
+.layer-table td { padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.03); color: var(--text-secondary); vertical-align: top; }
+.layer-table tr:hover td { background: rgba(255,255,255,0.02); }
+.layer-table .layer-name { font-weight: 700; color: var(--text-primary); white-space: nowrap; }
+.dependency-arrow { display: flex; align-items: center; gap: 10px; margin: 16px 0; padding: 12px 20px; background: rgba(0,0,0,0.2); border-radius: 10px; font-size: 14px; }
+.dependency-arrow .arrow-line { flex: 1; height: 2px; position: relative; }
+footer { padding: 60px 0; text-align: center; border-top: 1px solid rgba(255,255,255,0.04); }
+footer p { font-size: 14px; color: var(--text-dim); }
+</style>
+</head>
+<body>
+<div class="bg-layer bg-grid"></div>
+<div class="bg-layer bg-glow"></div>
+
+<nav>
+  <div class="inner">
+    <div class="logo">Kevin · DDD</div>
+    <div class="links">
+      <a href="#problem">问题</a>
+      <a href="#unified-lang">统一语言</a>
+      <a href="#boundaries">划分边界</a>
+      <a href="#strategic">战略设计</a>
+      <a href="#bounded-ctx">限界上下文</a>
+      <a href="#tactical">战术设计</a>
+      <a href="#implementation">实施</a>
+      <a href="#summary">总结</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="hero">
+    <div class="tag">DOMAIN-DRIVEN DESIGN · 领域驱动设计</div>
+    <h1>为什么要使用 <span class="accent">DDD</span></h1>
+    <div class="subtitle">驾驭软件复杂性的终极方法论 — 从战略设计到战术设计，从事件风暴到六边形架构</div>
+    <div class="stats">
+      <div class="stat"><div class="num" style="color:var(--accent-orange);">3</div><div class="label">核心域</div></div>
+      <div class="stat"><div class="num" style="color:var(--accent-cyan);">5</div><div class="label">战术构建块</div></div>
+      <div class="stat"><div class="num" style="color:var(--success);">4</div><div class="label">实施步骤</div></div>
+      <div class="stat"><div class="num" style="color:var(--purple);">2</div><div class="label">设计层面</div></div>
+    </div>
+  </div>
+
+  <div class="toc">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#problem">软件复杂性的代价</a></li>
+      <li><a href="#unified-lang">好处一：统一语言</a></li>
+      <li><a href="#boundaries">好处二：划分边界，分而治之</a></li>
+      <li><a href="#strategic">战略设计：三个域</a></li>
+      <li><a href="#bounded-ctx">限界上下文 & 上下文映射</a></li>
+      <li><a href="#tactical">战术设计：五个核心构建块</a></li>
+      <li><a href="#implementation">实施 DDD：四步走</a></li>
+      <li><a href="#summary">总结与实战建议</a></li>
+    </ol>
+  </div>
+
+  <!-- Section 1: Problem -->
+  <section id="problem">
+    <div class="section-tag" style="color:var(--danger);">THE PROBLEM</div>
+    <div class="section-title">软件复杂性的代价</div>
+    <div class="section-desc">每个开发团队都在经历这样的痛苦：系统越来越复杂，没人敢改代码，改一处崩三处。</div>
+
+    <div class="card-grid card-grid-3" style="margin-bottom:32px;">
+      <div class="card" style="border-left:4px solid var(--danger);">
+        <div style="font-size:16px;font-weight:700;color:var(--danger);margin-bottom:10px;">❌ 信息偏差</div>
+        <p style="margin:0;font-size:14px;">产品经理说"下单"，程序员想到的是 INSERT 一条记录。同一件事，两种理解。每一次信息转换的偏差，就是一个潜在的 Bug。</p>
+      </div>
+      <div class="card" style="border-left:4px solid var(--danger);">
+        <div style="font-size:16px;font-weight:700;color:var(--danger);margin-bottom:10px;">❌ 高度耦合</div>
+        <p style="margin:0;font-size:14px;">系统各部分高度耦合，改一处，处处崩。一环挂全挂，谁都不敢动这坨代码。</p>
+      </div>
+      <div class="card" style="border-left:4px solid var(--danger);">
+        <div style="font-size:16px;font-weight:700;color:var(--danger);margin-bottom:10px;">❌ 无法演进</div>
+        <p style="margin:0;font-size:14px;">三十万行的单体应用，改一个需求，整个系统都在颤抖。没有边界，就没有安全感。</p>
+      </div>
+    </div>
+
+    <div class="highlight-warn">
+      <strong>根因：</strong>没有统一语言，没有边界。软件复杂性的本质不是技术复杂度，而是业务复杂度。DDD 就是为此而生的。
+    </div>
+  </section>
+
+  <!-- Section 2: Unified Language -->
+  <section id="unified-lang">
+    <div class="section-tag" style="color:var(--success);">BENEFIT 1</div>
+    <div class="section-title">好处一：统一语言</div>
+    <div class="section-desc">DDD 引入通用语言（Ubiquitous Language），消除产品、开发、测试之间的理解偏差。</div>
+
+    <div class="card-grid card-grid-2" style="margin-bottom:32px;">
+      <div class="card" style="border-color:rgba(217,74,74,0.3);">
+        <div style="font-size:16px;font-weight:700;color:var(--danger);margin-bottom:12px;">❌ 没有通用语言</div>
+        <div class="code-block"><span class="comment">// 产品经理说："下单"</span>
+<span class="comment">// 程序员写了：</span>
+<span class="kw">function</span> <span class="method">saveOrderToDB</span>(data) {
+  db.insert(<span class="str">'orders'</span>, data);
+  <span class="comment">// 库存在哪？通知在哪？</span>
+  <span class="comment">// 没人知道...</span>
+}</div>
+      </div>
+      <div class="card" style="border-color:rgba(107,175,123,0.3);">
+        <div style="font-size:16px;font-weight:700;color:var(--success);margin-bottom:12px;">✅ DDD 通用语言</div>
+        <div class="code-block"><span class="comment">// 通用语言：placeOrder</span>
+<span class="kw">class</span> <span class="type">OrderService</span> {
+  <span class="kw">async</span> <span class="method">placeOrder</span>(cmd) {
+    <span class="var">order</span>.confirm();  <span class="comment">// 业务规则</span>
+    <span class="kw">await</span> <span class="var">payment</span>.charge();
+    <span class="var">domainEvent</span>.publish();
+  }
+}</div>
+      </div>
+    </div>
+
+    <div class="highlight">
+      <strong>核心价值：</strong>代码里的命名直接就是业务概念。<code>placeOrder</code> 而不是 <code>saveToDatabase</code>。改下单规则？改 Order 聚合根就行，不用在二十个文件里找逻辑。
+    </div>
+  </section>
+
+  <!-- Section 3: Boundaries -->
+  <section id="boundaries">
+    <div class="section-tag" style="color:var(--accent-cyan);">BENEFIT 2</div>
+    <div class="section-title">好处二：划分边界，分而治之</div>
+    <div class="section-desc">DDD 用限界上下文（Bounded Context）把系统切成独立的块，每个块有自己的领域模型和业务规则。</div>
+
+    <div class="card-grid card-grid-2" style="margin-bottom:32px;">
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;color:var(--danger);margin-bottom:12px;">❌ 30 万行单体应用</div>
+        <p style="font-size:14px;">订单逻辑、库存代码、支付逻辑、通知代码全部混在一起。改一个需求，整个系统都在颤抖。</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;">
+          <span class="badge badge-red">订单</span>
+          <span class="badge badge-red">库存</span>
+          <span class="badge badge-red">支付</span>
+          <span class="badge badge-red">通知</span>
+          <span class="badge badge-red">促销</span>
+          <span class="badge badge-red">用户</span>
+        </div>
+        <p style="font-size:13px;color:var(--text-dim);margin-top:12px;margin-bottom:0;">全部耦合在一起，无法独立演进</p>
+      </div>
+      <div class="card">
+        <div style="font-size:16px;font-weight:700;color:var(--success);margin-bottom:12px;">✅ 限界上下文划分</div>
+        <div class="card-grid card-grid-2" style="gap:12px;margin-bottom:12px;">
+          <div style="background:rgba(224,121,75,0.08);border:1px solid rgba(224,121,75,0.2);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:14px;font-weight:700;color:var(--accent-orange);">订单上下文</div>
+            <div style="font-size:12px;color:var(--text-secondary);">下单 · 改价 · 取消</div>
+          </div>
+          <div style="background:rgba(91,155,213,0.08);border:1px solid rgba(91,155,213,0.2);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:14px;font-weight:700;color:var(--accent-blue);">库存上下文</div>
+            <div style="font-size:12px;color:var(--text-secondary);">扣减 · 锁定 · 释放</div>
+          </div>
+          <div style="background:rgba(179,157,219,0.08);border:1px solid rgba(179,157,219,0.2);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:14px;font-weight:700;color:var(--purple);">支付上下文</div>
+            <div style="font-size:12px;color:var(--text-secondary);">扣款 · 退款 · 对账</div>
+          </div>
+          <div style="background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.2);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:14px;font-weight:700;color:var(--accent-cyan);">通知上下文</div>
+            <div style="font-size:12px;color:var(--text-secondary);">短信 · 邮件 · 推送</div>
+          </div>
+        </div>
+        <p style="font-size:13px;color:var(--success);margin-bottom:0;">独立演进 · 互不影响 · 明确接口通信</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 4: Strategic Design - Three Domains -->
+  <section id="strategic">
+    <div class="section-tag" style="color:var(--accent-blue);">STRATEGIC DESIGN</div>
+    <div class="section-title">战略设计：三个域</div>
+    <div class="section-desc">不是所有代码都同等重要。DDD 将业务分为核心域、支撑域和通用域，指导资源分配。</div>
+
+    <div class="card-grid card-grid-3" style="margin-bottom:32px;">
+      <div class="card" style="border:2px solid var(--accent-orange);background:rgba(224,121,75,0.04);">
+        <div style="font-size:24px;font-weight:800;color:var(--accent-orange);margin-bottom:12px;">★ 核心域</div>
+        <p style="font-size:15px;color:var(--text-primary);font-weight:600;margin-bottom:12px;">公司的护城河</p>
+        <ul style="font-size:14px;">
+          <li>电商的订单和支付</li>
+          <li>物流的路线规划</li>
+          <li>推荐的算法引擎</li>
+        </ul>
+        <div style="background:rgba(224,121,75,0.12);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--accent-orange);font-weight:600;margin-top:16px;">→ 配最强工程师，精细建模</div>
+      </div>
+      <div class="card" style="border-color:var(--accent-blue);">
+        <div style="font-size:24px;font-weight:800;color:var(--accent-blue);margin-bottom:12px;">⚙ 支撑域</div>
+        <p style="font-size:15px;color:var(--text-primary);font-weight:600;margin-bottom:12px;">必要但非差异化</p>
+        <ul style="font-size:14px;">
+          <li>报表系统</li>
+          <li>基础数据管理</li>
+          <li>内部工具</li>
+        </ul>
+        <div style="background:rgba(91,155,213,0.12);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--accent-blue);font-weight:600;margin-top:16px;">→ 适度投入，够用就行</div>
+      </div>
+      <div class="card" style="border-color:var(--purple);">
+        <div style="font-size:24px;font-weight:800;color:var(--purple);margin-bottom:12px;">□ 通用域</div>
+        <p style="font-size:15px;color:var(--text-primary);font-weight:600;margin-bottom:12px;">直接用成熟方案</p>
+        <ul style="font-size:14px;">
+          <li>用户认证 / OAuth</li>
+          <li>权限管理 / RBAC</li>
+          <li>日志 / 监控</li>
+        </ul>
+        <div style="background:rgba(179,157,219,0.12);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--purple);font-weight:600;margin-top:16px;">→ 不要重复造轮子</div>
+      </div>
+    </div>
+
+    <div class="highlight">
+      <strong>关键洞察：</strong>战略层面最重要的决策是识别核心域。把最优秀的工程师放在核心域，因为这是公司的核心竞争力所在。
+    </div>
+  </section>
+
+  <!-- Section 5: Bounded Contexts & Context Mapping -->
+  <section id="bounded-ctx">
+    <div class="section-tag" style="color:var(--accent-cyan);">STRATEGIC DESIGN</div>
+    <div class="section-title">限界上下文 & 上下文映射</div>
+    <div class="section-desc">限界上下文定义领域的边界。同一个上下文内术语含义一致，跨上下文则可能完全不同。</div>
+
+    <h3>同一个词，不同含义</h3>
+    <div class="card-grid card-grid-2" style="margin-bottom:32px;">
+      <div class="card" style="border-color:var(--accent-orange);">
+        <div style="font-size:18px;font-weight:700;color:var(--accent-orange);margin-bottom:12px;">销售上下文中的"商品"</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="badge badge-orange">价格</span>
+          <span class="badge badge-orange">促销</span>
+          <span class="badge badge-orange">描述</span>
+          <span class="badge badge-orange">分类</span>
+        </div>
+        <p style="font-size:14px;margin:0;">面向客户，关注销售属性</p>
+      </div>
+      <div class="card" style="border-color:var(--accent-blue);">
+        <div style="font-size:18px;font-weight:700;color:var(--accent-blue);margin-bottom:12px;">仓储上下文中的"商品"</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="badge badge-blue">SKU</span>
+          <span class="badge badge-blue">数量</span>
+          <span class="badge badge-blue">仓位</span>
+        </div>
+        <p style="font-size:14px;margin:0;">面向仓库，关注库存属性</p>
+      </div>
+    </div>
+
+    <h3>上下文映射模式</h3>
+    <div class="card-grid card-grid-3">
+      <div class="card" style="border-top:4px solid var(--danger);">
+        <div style="font-size:18px;font-weight:700;color:var(--danger);margin-bottom:10px;">防腐层 (ACL)</div>
+        <p style="font-size:14px;margin:0;">隔离外部系统，翻译外部模型为自己的模型，防止外部概念污染领域模型。</p>
+      </div>
+      <div class="card" style="border-top:4px solid var(--accent-blue);">
+        <div style="font-size:18px;font-weight:700;color:var(--accent-blue);margin-bottom:10px;">开放主机服务 (OHS)</div>
+        <p style="font-size:14px;margin:0;">提供标准协议（REST / gRPC），多个消费者统一接入，降低集成成本。</p>
+      </div>
+      <div class="card" style="border-top:4px solid var(--success);">
+        <div style="font-size:18px;font-weight:700;color:var(--success);margin-bottom:10px;">发布语言 (PL)</div>
+        <p style="font-size:14px;margin:0;">用统一的数据格式（JSON Schema / Protobuf）通信，各上下文共享语义。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 6: Tactical Design -->
+  <section id="tactical">
+    <div class="section-tag" style="color:var(--purple);">TACTICAL DESIGN</div>
+    <div class="section-title">战术设计：五个核心构建块</div>
+    <div class="section-desc">实体、值对象、聚合、领域服务、仓储 — 这五个构建块组合使用，构成完整的领域模型。</div>
+
+    <div class="card-grid card-grid-2" style="margin-bottom:20px;">
+      <div class="card" style="border-left:4px solid var(--accent-orange);">
+        <div style="font-size:22px;font-weight:800;color:var(--accent-orange);margin-bottom:10px;">实体 Entity</div>
+        <p style="font-size:15px;margin-bottom:12px;">有唯一 ID 的对象，通过 ID 判等。</p>
+        <p style="font-size:14px;"><strong>例如：</strong>订单、用户、商品</p>
+        <div class="code-block" style="font-size:13px;margin:12px 0 0;"><span class="comment">// 通过 ID 判等</span>
+order1.equals(order2) → <span class="kw">by id</span></div>
+      </div>
+      <div class="card" style="border-left:4px solid var(--accent-blue);">
+        <div style="font-size:22px;font-weight:800;color:var(--accent-blue);margin-bottom:10px;">值对象 Value Object</div>
+        <p style="font-size:15px;margin-bottom:12px;">没有唯一 ID，通过属性值判等。不可变。</p>
+        <p style="font-size:14px;"><strong>例如：</strong>地址、金额、日期</p>
+        <div class="code-block" style="font-size:13px;margin:12px 0 0;"><span class="comment">// 通过值判等</span>
+money1.equals(money2) → <span class="kw">by value</span></div>
+      </div>
+    </div>
+    <div class="card-grid card-grid-3">
+      <div class="card" style="border-left:4px solid var(--success);">
+        <div style="font-size:20px;font-weight:800;color:var(--success);margin-bottom:10px;">聚合 Aggregate</div>
+        <p style="font-size:14px;margin-bottom:8px;">一组相关对象的集合，作为数据修改的单元。<strong>聚合根</strong>保护业务规则不变。</p>
+        <div class="code-block" style="font-size:12px;margin:8px 0 0;">Order → OrderItem[]</div>
+      </div>
+      <div class="card" style="border-left:4px solid var(--purple);">
+        <div style="font-size:20px;font-weight:800;color:var(--purple);margin-bottom:10px;">领域服务</div>
+        <p style="font-size:14px;margin-bottom:8px;">不属于任何实体的业务逻辑。跨聚合的操作放这里。</p>
+        <div class="code-block" style="font-size:12px;margin:8px 0 0;">transfer(from, to, amt)</div>
+      </div>
+      <div class="card" style="border-left:4px solid var(--accent-cyan);">
+        <div style="font-size:20px;font-weight:800;color:var(--accent-cyan);margin-bottom:10px;">仓储 Repository</div>
+        <p style="font-size:14px;margin-bottom:8px;">为聚合提供持久化抽象。领域层不用关心底层存储。</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          <span class="badge badge-cyan">save()</span>
+          <span class="badge badge-cyan">findById()</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 7: Implementation -->
+  <section id="implementation">
+    <div class="section-tag" style="color:var(--accent-orange);">IMPLEMENTATION</div>
+    <div class="section-title">实施 DDD：四步走</div>
+    <div class="section-desc">从事件风暴到六边形架构，四步落地 DDD。</div>
+
+    <div class="step-grid">
+      <div class="step">
+        <div class="num" style="background:var(--accent-orange);">1</div>
+        <div class="title" style="color:var(--accent-orange);">事件风暴</div>
+        <div class="desc">业务专家 + 产品 + 开发，用通用语言推演业务流程，识别命令、事件、实体</div>
+      </div>
+      <div class="step">
+        <div class="num" style="background:var(--accent-blue);">2</div>
+        <div class="title" style="color:var(--accent-blue);">限界上下文</div>
+        <div class="desc">划分上下文边界，建立上下文映射，确定通信方式</div>
+      </div>
+      <div class="step">
+        <div class="num" style="background:var(--success);">3</div>
+        <div class="title" style="color:var(--success);">战术建模</div>
+        <div class="desc">在核心域用战术模式建模：实体、值对象、聚合、领域服务、仓储</div>
+      </div>
+      <div class="step">
+        <div class="num" style="background:var(--purple);">4</div>
+        <div class="title" style="color:var(--purple);">六边形架构</div>
+        <div class="desc">领域层与基础设施层分离，领域逻辑保持纯粹</div>
+      </div>
+    </div>
+
+    <h3>六边形架构（端口 + 适配器）</h3>
+    <p>六边形架构的核心思想：<strong>领域层在中心，通过端口（接口）与外部通信，适配器负责具体的技术实现。</strong>领域层不依赖任何基础设施，可以独立测试和演进。</p>
+
+    <!-- Detailed hexagonal diagram -->
+    <div class="hex-container">
+      <!-- Left: Driving side -->
+      <div class="hex-side">
+        <div class="hex-label-side" style="color:var(--accent-blue);background:rgba(91,155,213,0.06);">驱动端（左侧）</div>
+        <div class="hex-adapter" style="border-color:rgba(91,155,213,0.3);">
+          <div class="adapter-icon">🌐</div>
+          <div class="adapter-name" style="color:var(--accent-blue);">REST Controller</div>
+          <div class="adapter-detail">HTTP 请求 → 调用应用服务</div>
+        </div>
+        <div class="hex-adapter" style="border-color:rgba(91,155,213,0.3);">
+          <div class="adapter-icon">🖥️</div>
+          <div class="adapter-name" style="color:var(--accent-blue);">Web UI</div>
+          <div class="adapter-detail">用户操作 → 触发命令</div>
+        </div>
+        <div class="hex-adapter" style="border-color:rgba(91,155,213,0.3);">
+          <div class="adapter-icon">📨</div>
+          <div class="adapter-name" style="color:var(--accent-blue);">MQ Consumer</div>
+          <div class="adapter-detail">消息事件 → 领域事件处理</div>
+        </div>
+        <div class="hex-adapter" style="border-color:rgba(91,155,213,0.3);">
+          <div class="adapter-icon">⏰</div>
+          <div class="adapter-name" style="color:var(--accent-blue);">定时任务</div>
+          <div class="adapter-detail">Cron 触发 → 批量处理</div>
+        </div>
+      </div>
+
+      <!-- Center: Domain layer with ports -->
+      <div class="hex-center">
+        <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+          <span class="hex-port hex-port-in">← 输入端口</span>
+          <span class="hex-port hex-port-out">输出端口 →</span>
+        </div>
+        <div class="hex-core">
+          <div style="font-size:22px;font-weight:800;color:var(--accent-orange);margin-bottom:12px;">🏛️ 领域层</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;">
+            <span class="badge badge-orange">实体</span>
+            <span class="badge badge-blue">值对象</span>
+            <span class="badge badge-green">聚合</span>
+            <span class="badge badge-purple">领域服务</span>
+          </div>
+          <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
+            纯业务逻辑 · 零外部依赖<br>
+            <span style="color:var(--accent-orange);font-weight:600;">不依赖 Spring / MySQL / Redis</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:12px;">
+          <span class="hex-port hex-port-out">← 输出端口</span>
+          <span class="hex-port hex-port-in">输入端口 →</span>
+        </div>
+      </div>
+
+      <!-- Right: Driven side -->
+      <div class="hex-side">
+        <div class="hex-label-side" style="color:var(--purple);background:rgba(179,157,219,0.06);">被驱动端（右侧）</div>
+        <div class="hex-adapter" style="border-color:rgba(179,157,219,0.3);">
+          <div class="adapter-icon">🗄️</div>
+          <div class="adapter-name" style="color:var(--purple);">MySQL Repository</div>
+          <div class="adapter-detail">实现仓储接口 · JPA/MyBatis</div>
+        </div>
+        <div class="hex-adapter" style="border-color:rgba(179,157,219,0.3);">
+          <div class="adapter-icon">⚡</div>
+          <div class="adapter-name" style="color:var(--purple);">Redis Cache</div>
+          <div class="adapter-detail">缓存适配器 · 读写分离</div>
+        </div>
+        <div class="hex-adapter" style="border-color:rgba(179,157,219,0.3);">
+          <div class="adapter-icon">📤</div>
+          <div class="adapter-name" style="color:var(--purple);">MQ Producer</div>
+          <div class="adapter-detail">领域事件 → 消息队列发布</div>
+        </div>
+        <div class="hex-adapter" style="border-color:rgba(179,157,219,0.3);">
+          <div class="adapter-icon">🔗</div>
+          <div class="adapter-name" style="color:var(--purple);">外部 API</div>
+          <div class="adapter-detail">防腐层 · 调用第三方服务</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>代码示例：端口与适配器</h3>
+    <p>领域层定义<strong>端口（接口）</strong>，基础设施层提供<strong>适配器（实现）</strong>。这就是依赖反转原则（DIP）。</p>
+
+    <div class="card-grid card-grid-2">
+      <div class="card" style="border-color:rgba(224,121,75,0.3);">
+        <div style="font-size:16px;font-weight:700;color:var(--accent-orange);margin-bottom:12px;">📐 领域层：定义端口（接口）</div>
+        <div class="code-block"><span class="comment">// 输出端口 — 仓储接口</span>
+<span class="kw">interface</span> <span class="type">OrderRepository</span> {
+  <span class="type">Order</span> <span class="method">findById</span>(<span class="type">OrderId</span> id);
+  <span class="kw">void</span> <span class="method">save</span>(<span class="type">Order</span> order);
+}
+
+<span class="comment">// 输出端口 — 事件发布</span>
+<span class="kw">interface</span> <span class="type">EventPublisher</span> {
+  <span class="kw">void</span> <span class="method">publish</span>(<span class="type">DomainEvent</span> event);
+}
+
+<span class="comment">// 输入端口 — 应用服务</span>
+<span class="kw">class</span> <span class="type">PlaceOrderService</span> {
+  <span class="kw">constructor</span>(
+    <span class="kw">private</span> <span class="var">orderRepo</span>: <span class="type">OrderRepository</span>,
+    <span class="kw">private</span> <span class="var">events</span>: <span class="type">EventPublisher</span>
+  ) {}
+
+  <span class="method">execute</span>(cmd: <span class="type">PlaceOrderCmd</span>) {
+    <span class="kw">const</span> <span class="var">order</span> = <span class="type">Order</span>.create(cmd);
+    <span class="kw">this</span>.<span class="var">orderRepo</span>.<span class="method">save</span>(order);
+    <span class="kw">this</span>.<span class="var">events</span>.<span class="method">publish</span>(
+      <span class="kw">new</span> <span class="type">OrderPlaced</span>(order.id)
+    );
+  }
+}</div>
+      </div>
+      <div class="card" style="border-color:rgba(179,157,219,0.3);">
+        <div style="font-size:16px;font-weight:700;color:var(--purple);margin-bottom:12px;">🔧 基础设施层：实现适配器</div>
+        <div class="code-block"><span class="comment">// 适配器 — MySQL 实现仓储</span>
+<span class="kw">class</span> <span class="type">MySqlOrderRepository</span>
+  <span class="kw">implements</span> <span class="type">OrderRepository</span> {
+
+  <span class="method">findById</span>(id: <span class="type">OrderId</span>): <span class="type">Order</span> {
+    <span class="kw">const</span> <span class="var">row</span> = <span class="kw">await</span> db.query(
+      <span class="str">'SELECT * FROM orders WHERE id=?'</span>,
+      [id.value]
+    );
+    <span class="kw">return</span> <span class="type">OrderMapper</span>.<span class="method">toDomain</span>(row);
+  }
+
+  <span class="method">save</span>(order: <span class="type">Order</span>): <span class="kw">void</span> {
+    <span class="kw">const</span> <span class="var">row</span> = <span class="type">OrderMapper</span>.<span class="method">toRow</span>(order);
+    <span class="kw">await</span> db.insert(<span class="str">'orders'</span>, row);
+  }
+}
+
+<span class="comment">// 适配器 — Kafka 事件发布</span>
+<span class="kw">class</span> <span class="type">KafkaEventPublisher</span>
+  <span class="kw">implements</span> <span class="type">EventPublisher</span> {
+  <span class="method">publish</span>(event: <span class="type">DomainEvent</span>) {
+    <span class="kw">await</span> kafka.send(
+      event.topic, event.payload
+    );
+  }
+}</div>
+      </div>
+    </div>
+
+    <h3>依赖方向</h3>
+    <p>关键原则：<strong>依赖指向内部</strong>。外层依赖内层，内层绝不依赖外层。</p>
+
+    <table class="layer-table">
+      <thead>
+        <tr><th>层</th><th>职责</th><th>典型技术</th><th>依赖方向</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="layer-name" style="color:var(--accent-blue);">驱动端适配器</td>
+          <td>接收外部请求，调用应用服务</td>
+          <td>Spring MVC, Express, GraphQL</td>
+          <td><span style="color:var(--accent-blue);">→ 依赖应用层</span></td>
+        </tr>
+        <tr>
+          <td class="layer-name" style="color:var(--success);">应用层</td>
+          <td>编排用例，不包含业务规则</td>
+          <td>Application Service</td>
+          <td><span style="color:var(--success);">→ 依赖领域层</span></td>
+        </tr>
+        <tr>
+          <td class="layer-name" style="color:var(--accent-orange);">领域层（核心）</td>
+          <td>实体、值对象、聚合、领域服务</td>
+          <td>纯 Java/Kotlin/TS</td>
+          <td><span style="color:var(--accent-orange);font-weight:700;">★ 零依赖</span></td>
+        </tr>
+        <tr>
+          <td class="layer-name" style="color:var(--purple);">被驱动端适配器</td>
+          <td>实现领域层定义的端口接口</td>
+          <td>JPA, MyBatis, Redis, Kafka</td>
+          <td><span style="color:var(--purple);">→ 实现领域层接口</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="highlight">
+      <strong>🔑 核心价值：</strong>领域逻辑不依赖任何框架和基础设施。你可以把 MySQL 换成 MongoDB，把 Kafka 换成 RabbitMQ，领域层代码一行都不用改。这就是六边形架构的威力 — <strong>可替换、可测试、可演进</strong>。
+    </div>
+  </section>
+
+  <!-- Section 8: Summary -->
+  <section id="summary">
+    <div class="section-tag" style="color:var(--accent-cyan);">SUMMARY</div>
+    <div class="section-title">总结与实战建议</div>
+    <div class="section-desc">DDD 的核心价值：统一语言、划分边界、业务驱动。</div>
+
+    <div class="card-grid card-grid-3" style="margin-bottom:32px;">
+      <div class="card" style="border-top:4px solid var(--accent-orange);text-align:center;">
+        <div style="font-size:32px;color:var(--accent-orange);font-weight:800;margin-bottom:10px;">统一语言</div>
+        <p style="font-size:14px;margin:0;">消除歧义，产品、开发、测试用同一种语言沟通</p>
+      </div>
+      <div class="card" style="border-top:4px solid var(--accent-blue);text-align:center;">
+        <div style="font-size:32px;color:var(--accent-blue);font-weight:800;margin-bottom:10px;">划分边界</div>
+        <p style="font-size:14px;margin:0;">限界上下文隔离复杂度，大系统变小系统</p>
+      </div>
+      <div class="card" style="border-top:4px solid var(--success);text-align:center;">
+        <div style="font-size:32px;color:var(--success);font-weight:800;margin-bottom:10px;">业务驱动</div>
+        <p style="font-size:14px;margin:0;">领域模型驱动设计，代码即业务文档</p>
+      </div>
+    </div>
+
+    <h3>实战建议</h3>
+    <div class="card-grid card-grid-3" style="margin-bottom:32px;">
+      <div class="card" style="border-left:4px solid var(--warning);">
+        <div style="font-size:15px;font-weight:700;color:var(--warning);margin-bottom:8px;">⚠️ DDD 不是银弹</div>
+        <p style="font-size:14px;margin:0;">简单 CRUD 不需要 DDD，别过度设计</p>
+      </div>
+      <div class="card" style="border-left:4px solid var(--accent-orange);">
+        <div style="font-size:15px;font-weight:700;color:var(--accent-orange);margin-bottom:8px;">🔥 复杂度超临界点</div>
+        <p style="font-size:14px;margin:0;">业务复杂度够高，DDD 才是你的核武器</p>
+      </div>
+      <div class="card" style="border-left:4px solid var(--success);">
+        <div style="font-size:15px;font-weight:700;color:var(--success);margin-bottom:8px;">👥 业务专家参与</div>
+        <p style="font-size:14px;margin:0;">DDD 不是开发团队自己玩的事，业务专家必须参与</p>
+      </div>
+    </div>
+
+    <div class="highlight">
+      <strong>🏆 掌握 DDD，是从码农到架构师的必经之路。</strong>让你的软件，真正反映业务的本质。
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="container">
+    <p>Kevin · 为什么要使用 DDD · 领域驱动设计深入讲解</p>
+    <p style="margin-top:8px;">配套视频 · 代码笔记 · 架构实战</p>
+  </div>
+</footer>
+</body>
+</html>
